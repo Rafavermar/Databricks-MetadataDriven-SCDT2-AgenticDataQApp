@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pydantic
+databricks-sql-connector
+google-genai
+openai
+anthropic

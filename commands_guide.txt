@@ -1,0 +1,39 @@
+# Metadata-Driven + SCD Type 2 + Agentic Data Quality POC Commands
+
+## 1) Load environment variables (PowerShell)
+. .\.load-env.ps1
+
+## 2) Set required environment variables manually (Bash alternative)
+export MONGODB_URI="mongodb+srv://<user>:<password>@<cluster>/"
+export LLM_PROVIDER="gemini"
+export GEMINI_API_KEY="<your-gemini-api-key>"
+
+# Databricks CLI and SQL connector variables:
+export DATABRICKS_HOST="https://<your-workspace>.cloud.databricks.com"
+export DATABRICKS_TOKEN="<your-databricks-token>"
+export DATABRICKS_SERVER_HOSTNAME="<your-workspace>.cloud.databricks.com"
+export DATABRICKS_HTTP_PATH="/sql/1.0/warehouses/<your-warehouse-id>"
+
+## 3) Seed MongoDB base data locally
+python scripts/00_mongo_simulator.py --mode reset_and_seed --mongo-uri "$env:MONGODB_URI"
+
+## 4) Validate bundle configuration
+databricks bundle validate -t dev
+
+## 5) Deploy bundle
+databricks bundle deploy -t dev
+
+## 6) Run the Python workflow job
+databricks bundle run -t dev poc_pipeline_job
+
+## 7) Start the Databricks App
+databricks bundle run -t dev dq_rescue_agent
+
+## 8) Simulate incremental good and bad records
+python scripts/00_mongo_simulator.py --mode add_good --mongo-uri "$env:MONGODB_URI"
+python scripts/00_mongo_simulator.py --mode add_bad --mongo-uri "$env:MONGODB_URI"
+
+## 9) Rerun the workflow after new data
+databricks bundle run -t dev poc_pipeline_job
+
+[ DATABRICKS APP URL : Paste link here after deployment ]
