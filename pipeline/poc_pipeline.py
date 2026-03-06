@@ -38,6 +38,17 @@ def get_param(params: Dict[str, str], key: str, env_name: str, default: str = ""
     return params.get(key) or os.getenv(env_name, default)
 
 
+def parse_bool_flag(raw_value: str, flag_name: str) -> bool:
+    value = (raw_value or "").strip().lower()
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off", ""}:
+        return False
+    raise ValueError(
+        f"Invalid value for {flag_name}: '{raw_value}'. Use true/false."
+    )
+
+
 def set_runtime_config(
     spark: SparkSession,
     mongodb_uri: str,
@@ -399,7 +410,7 @@ def scd2_silver(spark: SparkSession) -> None:
     )
 
 
-def dq_engine(spark: SparkSession) -> None:
+def dq_engine(spark: SparkSession, dq_fail_on_issues: bool) -> None:
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA_NAME}")
     spark.sql(
         f"""
@@ -487,8 +498,22 @@ def dq_engine(spark: SparkSession) -> None:
     total_failures = issues_buffer.count() if issues_buffer is not None else 0
     if total_failures > 0:
         issues_buffer.write.format("delta").mode("append").saveAsTable(ISSUES_TABLE)
-        LOGGER.error("Data quality failed. Logged %s issue rows to %s", total_failures, ISSUES_TABLE)
-        raise RuntimeError(f"Data quality checks failed with {total_failures} issues")
+        if dq_fail_on_issues:
+            LOGGER.error(
+                "Data quality failed. Logged %s issue rows to %s. "
+                "DQ_FAIL_ON_ISSUES=true, failing task.",
+                total_failures,
+                ISSUES_TABLE,
+            )
+            raise RuntimeError(f"[DQ_VALIDATION_FAILED] Data quality checks failed with {total_failures} issues")
+
+        LOGGER.warning(
+            "Data quality found %s issue rows and logged them to %s. "
+            "DQ_FAIL_ON_ISSUES=false, task continues without failing the job.",
+            total_failures,
+            ISSUES_TABLE,
+        )
+        return
 
     LOGGER.info("Data quality checks completed successfully")
 
@@ -499,6 +524,7 @@ def run_step(
     mongodb_uri: str,
     llm_provider: str,
     gemini_api_key: str,
+    dq_fail_on_issues: bool,
 ) -> None:
     if step == "SetupMetadata":
         setup_metadata(spark, mongodb_uri=mongodb_uri, llm_provider=llm_provider)
@@ -510,7 +536,7 @@ def run_step(
         scd2_silver(spark)
         return
     if step == "DqEngine":
-        dq_engine(spark)
+        dq_engine(spark, dq_fail_on_issues=dq_fail_on_issues)
         return
     raise ValueError(f"Unsupported pipeline step: {step}")
 
@@ -526,6 +552,10 @@ def main() -> None:
     mongodb_uri = get_param(params, "mongodb-uri", "MONGODB_URI")
     llm_provider = get_param(params, "llm-provider", "LLM_PROVIDER", "gemini")
     gemini_api_key = get_param(params, "gemini-api-key", "GEMINI_API_KEY")
+    dq_fail_on_issues = parse_bool_flag(
+        get_param(params, "dq-fail-on-issues", "DQ_FAIL_ON_ISSUES", "false"),
+        "dq-fail-on-issues",
+    )
 
     spark = SparkSession.builder.appName(step).getOrCreate()
     try:
@@ -536,6 +566,7 @@ def main() -> None:
             mongodb_uri=mongodb_uri,
             llm_provider=llm_provider,
             gemini_api_key=gemini_api_key,
+            dq_fail_on_issues=dq_fail_on_issues,
         )
     except Exception:
         LOGGER.exception("%s failed", step)

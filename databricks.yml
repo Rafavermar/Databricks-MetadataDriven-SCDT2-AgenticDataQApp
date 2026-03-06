@@ -11,6 +11,9 @@ variables:
     description: LLM provider
   gemini_api_key:
     description: Gemini API key
+  dq_fail_on_issues:
+    description: Fail DqEngine task when DQ issues are found (true/false)
+    default: "false"
 #  openai_api_key:
 #    description: OpenAI API key
 #  anthropic_api_key:
@@ -88,6 +91,8 @@ resources:
               - "${var.llm_provider}"
               - "--gemini-api-key"
               - "${var.gemini_api_key}"
+              - "--dq-fail-on-issues"
+              - "${var.dq_fail_on_issues}"
 
       environments:
         - environment_key: default

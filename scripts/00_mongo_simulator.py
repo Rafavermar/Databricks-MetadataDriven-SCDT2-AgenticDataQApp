@@ -129,6 +129,11 @@ def add_bad(mongo_uri: str) -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    default_mongo_uri = (
+        os.getenv("MONGODB_URI", "").strip()
+        or os.getenv("BUNDLE_VAR_mongodb_uri", "").strip()
+    )
+
     parser = argparse.ArgumentParser(description="MongoDB local simulator for the Databricks POC")
     parser.add_argument(
         "--mode",
@@ -138,8 +143,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mongo-uri",
-        default=os.getenv("MONGODB_URI", ""),
-        help="MongoDB URI. Defaults to MONGODB_URI environment variable.",
+        default=default_mongo_uri,
+        help="MongoDB URI. Defaults to MONGODB_URI or BUNDLE_VAR_mongodb_uri.",
     )
     return parser.parse_args()
 
@@ -152,7 +157,9 @@ def main() -> None:
 
     args = parse_args()
     if not args.mongo_uri:
-        raise ValueError("MongoDB URI is required. Use --mongo-uri or set MONGODB_URI.")
+        raise ValueError(
+            "MongoDB URI is required. Use --mongo-uri or load .env first with: . .\\.load-env.ps1"
+        )
 
     LOGGER.info("Running simulator mode: %s", args.mode)
 

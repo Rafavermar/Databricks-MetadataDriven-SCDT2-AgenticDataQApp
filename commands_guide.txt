@@ -1,6 +1,7 @@
 # Metadata-Driven + SCD Type 2 + Agentic Data Quality POC Commands
 
 ## 1) Load environment variables (PowerShell)
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 . .\.load-env.ps1
 
 ## 2) Set required environment variables manually (Bash alternative)
@@ -15,23 +16,46 @@ export DATABRICKS_SERVER_HOSTNAME="<your-workspace>.cloud.databricks.com"
 export DATABRICKS_HTTP_PATH="/sql/1.0/warehouses/<your-warehouse-id>"
 
 ## 3) Seed MongoDB base data locally
-python scripts/00_mongo_simulator.py --mode reset_and_seed --mongo-uri "$env:MONGODB_URI"
+.\.venv\Scripts\Activate.ps1
+python scripts/00_mongo_simulator.py --mode reset_and_seed
+# PowerShell one-liner (loads env + runs):
+. .\.load-env.ps1; python scripts/00_mongo_simulator.py --mode reset_and_seed
 
 ## 4) Validate bundle configuration
 databricks bundle validate -t dev
 
-## 5) Deploy bundle
+## 5) Set DQ mode and deploy (applies on deploy)
+# Warn mode (default): logs issues but does not fail DqEngine task
+$env:BUNDLE_VAR_dq_fail_on_issues="false"
 databricks bundle deploy -t dev
+
+# Strict mode: fail DqEngine task when DQ issues are found
+# $env:BUNDLE_VAR_dq_fail_on_issues="true"
+# databricks bundle deploy -t dev
 
 ## 6) Run the Python workflow job
 databricks bundle run -t dev poc_pipeline_job
+# Expected DQ behavior:
+# - dq_fail_on_issues=false  -> job can finish SUCCESS and logs issues in workspace.agentic_poc.dq_issues_log
+# - dq_fail_on_issues=true   -> DqEngine ends FAILED with [DQ_VALIDATION_FAILED] if issues exist (expected behavior)
 
 ## 7) Start the Databricks App
 databricks bundle run -t dev dq_rescue_agent
+# Open the app URL in browser:
+# - UX interface: https://<your-app-url>/ui
+# - API docs:      https://<your-app-url>/docs
+# Optional API checks (PowerShell):
+# Invoke-RestMethod -Method Get -Uri "https://<your-app-url>/issues-summary?window_hours=24&max_issues=200&sample_size=3"
+# Invoke-RestMethod -Method Post -Uri "https://<your-app-url>/analyze" -ContentType "application/json" -Body '{"analysis_mode":"summary","additional_context":"Run after add_bad","window_hours":24,"max_issues":200,"sample_size":3,"concise":true}'
+# Invoke-RestMethod -Method Post -Uri "https://<your-app-url>/analyze" -ContentType "application/json" -Body '{"analysis_mode":"latest","additional_context":"Focus only latest issue","concise":true}'
 
 ## 8) Simulate incremental good and bad records
-python scripts/00_mongo_simulator.py --mode add_good --mongo-uri "$env:MONGODB_URI"
-python scripts/00_mongo_simulator.py --mode add_bad --mongo-uri "$env:MONGODB_URI"
+.\.venv\Scripts\Activate.ps1
+python scripts/00_mongo_simulator.py --mode add_good
+python scripts/00_mongo_simulator.py --mode add_bad
+# PowerShell one-liners (loads env + runs):
+. .\.load-env.ps1; python scripts/00_mongo_simulator.py --mode add_good
+. .\.load-env.ps1; python scripts/00_mongo_simulator.py --mode add_bad
 
 ## 9) Rerun the workflow after new data
 databricks bundle run -t dev poc_pipeline_job
