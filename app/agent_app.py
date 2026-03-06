@@ -248,7 +248,7 @@ UI_HTML = """
   <div class="wrapper">
     <div class="top">
       <div>
-        <h1 class="title">Agentic Data Quality Agent</h1>
+        <h1 class="title">Data Quality Agent</h1>
         <p class="subtitle">Interactive view on top of /latest-issue and /analyze</p>
       </div>
       <div class="actions">
@@ -836,7 +836,7 @@ def build_analysis_prompt(
 
 
 configure_logging()
-app = FastAPI(title="Agentic Data Quality Agent", version="1.0.0")
+app = FastAPI(title="Data Quality Agent", version="1.0.0")
 
 
 @app.get("/")
