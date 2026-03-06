@@ -1,5 +1,5 @@
 bundle:
-  name: agentic_dq_scala_poc
+  name: agentic_dq_poc
 
 workspace:
   artifact_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}/artifacts
