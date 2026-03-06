@@ -35,7 +35,7 @@ SYSTEM_PROMPT = (
     "and propose the smallest safe fix with minimal Python Spark code or SQL plus quick validation checks."
 )
 
-UI_HTML = """
+UI_HTML = r"""
 <!doctype html>
 <html lang="en">
 <head>
@@ -208,6 +208,58 @@ UI_HTML = """
       max-height: 680px;
       flex: 1;
     }
+    .analysis-output {
+      border: 1px solid #e4ece6;
+      border-radius: 10px;
+      background: #f8fbf9;
+      padding: 14px;
+      overflow-y: auto;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #1d2c21;
+      white-space: normal;
+    }
+    .analysis-output h3,
+    .analysis-output h4 {
+      margin: 10px 0 6px;
+      font-size: 14px;
+    }
+    .analysis-output p {
+      margin: 0 0 8px;
+    }
+    .analysis-output ul,
+    .analysis-output ol {
+      margin: 0 0 10px 18px;
+      padding: 0;
+    }
+    .analysis-output li {
+      margin: 0 0 4px;
+    }
+    .analysis-output code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+      background: #edf3ef;
+      border: 1px solid #d8e5dd;
+      border-radius: 6px;
+      padding: 1px 5px;
+    }
+    .analysis-output pre.analysis-code {
+      margin: 0 0 10px;
+      padding: 10px;
+      background: #18261d;
+      border: 1px solid #203228;
+      border-radius: 8px;
+      color: #e8f3ed;
+      overflow-x: auto;
+    }
+    .analysis-output pre.analysis-code code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      font-size: 12px;
+    }
     .kv {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -320,7 +372,7 @@ UI_HTML = """
         <h2>Agent analysis</h2>
         <p class="hint">Direct, technical remediation based on selected analysis mode.</p>
         <label>Analysis output</label>
-        <pre id="analysisOutput">No analysis yet.</pre>
+        <div id="analysisOutput" class="analysis-output"><p>No analysis yet.</p></div>
         <div class="footer">Provider: <span id="providerField">-</span></div>
       </section>
     </div>
@@ -337,6 +389,106 @@ UI_HTML = """
 
     function prettyJson(value) {
       return JSON.stringify(value, null, 2);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function formatInline(value) {
+      return escapeHtml(value).replace(/`([^`]+)`/g, "<code>$1</code>");
+    }
+
+    function renderMarkdownToHtml(markdownText) {
+      if (!markdownText) {
+        return "<p>No analysis returned.</p>";
+      }
+
+      const raw = String(markdownText).replace(/\r/g, "");
+      const chunks = raw.split("```");
+      const htmlChunks = [];
+
+      for (let i = 0; i < chunks.length; i += 1) {
+        const chunk = chunks[i];
+
+        if (i % 2 === 1) {
+          const codeLines = chunk.split("\n");
+          let language = "";
+          if (codeLines.length > 0 && /^[a-zA-Z0-9_+-]+$/.test(codeLines[0].trim())) {
+            language = codeLines.shift().trim().toLowerCase();
+          }
+          const codeBody = escapeHtml(codeLines.join("\n").trim());
+          htmlChunks.push(
+            `<pre class="analysis-code"><code${language ? ` class="lang-${language}"` : ""}>${codeBody}</code></pre>`
+          );
+          continue;
+        }
+
+        const lines = chunk.split("\n");
+        const content = [];
+        let listMode = "";
+
+        const closeList = () => {
+          if (listMode === "ul") {
+            content.push("</ul>");
+          } else if (listMode === "ol") {
+            content.push("</ol>");
+          }
+          listMode = "";
+        };
+
+        for (const originalLine of lines) {
+          const line = originalLine.trim();
+
+          if (!line) {
+            closeList();
+            continue;
+          }
+
+          const heading = line.match(/^(#{1,4})\s+(.+)$/);
+          if (heading) {
+            closeList();
+            const level = Math.min(4, heading[1].length + 2);
+            content.push(`<h${level}>${formatInline(heading[2])}</h${level}>`);
+            continue;
+          }
+
+          const ordered = line.match(/^\d+[\.\)]\s+(.+)$/);
+          if (ordered) {
+            if (listMode !== "ol") {
+              closeList();
+              content.push("<ol>");
+              listMode = "ol";
+            }
+            content.push(`<li>${formatInline(ordered[1])}</li>`);
+            continue;
+          }
+
+          const bullet = line.match(/^[-*]\s+(.+)$/);
+          if (bullet) {
+            if (listMode !== "ul") {
+              closeList();
+              content.push("<ul>");
+              listMode = "ul";
+            }
+            content.push(`<li>${formatInline(bullet[1])}</li>`);
+            continue;
+          }
+
+          closeList();
+          content.push(`<p>${formatInline(line)}</p>`);
+        }
+
+        closeList();
+        htmlChunks.push(content.join(""));
+      }
+
+      return htmlChunks.join("") || "<p>No analysis returned.</p>";
     }
 
     function safeParseJson(text) {
@@ -465,7 +617,7 @@ UI_HTML = """
       };
 
       setStatus("Running analysis...");
-      analysisOutput.textContent = "Running...";
+      analysisOutput.innerHTML = "<p>Running...</p>";
 
       try {
         const response = await fetch("/analyze", {
@@ -482,11 +634,11 @@ UI_HTML = """
         renderIssue(state.issue);
         state.summary = data.issues_summary || state.summary;
         renderSummary(data.issues_summary || state.summary);
-        analysisOutput.textContent = data.analysis || "No analysis returned.";
+        analysisOutput.innerHTML = renderMarkdownToHtml(data.analysis || "No analysis returned.");
         providerField.textContent = data.provider || "-";
         setStatus("Analysis completed (" + (data.analysis_mode || options.analysis_mode) + " mode).");
       } catch (error) {
-        analysisOutput.textContent = "Analysis failed.";
+        analysisOutput.innerHTML = "<p>Analysis failed.</p>";
         setStatus(error.message || "Analysis failed.", true);
       }
     }
@@ -495,7 +647,7 @@ UI_HTML = """
       state.issue = null;
       state.summary = null;
       document.getElementById("contextInput").value = "";
-      document.getElementById("analysisOutput").textContent = "No analysis yet.";
+      document.getElementById("analysisOutput").innerHTML = "<p>No analysis yet.</p>";
       document.getElementById("providerField").textContent = "-";
       renderIssue(null);
       renderSummary(null);
