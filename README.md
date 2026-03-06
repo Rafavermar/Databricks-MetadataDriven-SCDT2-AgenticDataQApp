@@ -16,6 +16,8 @@ Minimal metadata-driven pipeline with SCD Type 2 and data quality checks, implem
   - `DqEngine`
 - App: FastAPI service (`app/agent_app.py`) that reads latest DQ issue and generates remediation guidance with LLM.
 
+![Architecture.png](docs/Architecture_main.jpg)
+
 ### Repository Layout
 
 - `databricks.yml`: Databricks Asset Bundle definition (job + app).
