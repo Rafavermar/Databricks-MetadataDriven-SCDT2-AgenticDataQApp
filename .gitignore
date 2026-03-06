@@ -1,0 +1,26 @@
+# Secrets
+.env
+
+# VS Code / Metals / Bloop (Scala IDE)
+.metals/
+.bloop/
+.vscode/
+.idea/
+target/
+pipeline/target/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.pytest_cache/
+
+# Databricks Bundle runtime
+.bundle/
+.databricks/
+
+# OS
+.DS_Store
+Thumbs.db

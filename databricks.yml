@@ -1,0 +1,132 @@
+bundle:
+  name: agentic_dq_poc
+
+workspace:
+  artifact_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}/artifacts
+
+variables:
+  mongodb_uri:
+    description: MongoDB connection URI
+  llm_provider:
+    description: LLM provider
+  gemini_api_key:
+    description: Gemini API key
+  dq_fail_on_issues:
+    description: Fail DqEngine task when DQ issues are found (true/false)
+    default: "false"
+#  openai_api_key:
+#    description: OpenAI API key
+#  anthropic_api_key:
+#    description: Anthropic API key
+  databricks_server_hostname:
+    description: SQL connector hostname
+  databricks_http_path:
+    description: SQL warehouse HTTP path
+  databricks_token:
+    description: Databricks token
+
+resources:
+  jobs:
+    poc_pipeline_job:
+      name: poc_pipeline_job
+      tasks:
+        - task_key: SetupMetadata
+          environment_key: default
+          spark_python_task:
+            python_file: ./pipeline/poc_pipeline.py
+            parameters:
+              - "--step"
+              - "SetupMetadata"
+              - "--mongodb-uri"
+              - "${var.mongodb_uri}"
+              - "--llm-provider"
+              - "${var.llm_provider}"
+              - "--gemini-api-key"
+              - "${var.gemini_api_key}"
+
+        - task_key: IngestBronze
+          environment_key: default
+          depends_on:
+            - task_key: SetupMetadata
+          spark_python_task:
+            python_file: ./pipeline/poc_pipeline.py
+            parameters:
+              - "--step"
+              - "IngestBronze"
+              - "--mongodb-uri"
+              - "${var.mongodb_uri}"
+              - "--llm-provider"
+              - "${var.llm_provider}"
+              - "--gemini-api-key"
+              - "${var.gemini_api_key}"
+
+        - task_key: Scd2Silver
+          environment_key: default
+          depends_on:
+            - task_key: IngestBronze
+          spark_python_task:
+            python_file: ./pipeline/poc_pipeline.py
+            parameters:
+              - "--step"
+              - "Scd2Silver"
+              - "--mongodb-uri"
+              - "${var.mongodb_uri}"
+              - "--llm-provider"
+              - "${var.llm_provider}"
+              - "--gemini-api-key"
+              - "${var.gemini_api_key}"
+
+        - task_key: DqEngine
+          environment_key: default
+          depends_on:
+            - task_key: Scd2Silver
+          spark_python_task:
+            python_file: ./pipeline/poc_pipeline.py
+            parameters:
+              - "--step"
+              - "DqEngine"
+              - "--mongodb-uri"
+              - "${var.mongodb_uri}"
+              - "--llm-provider"
+              - "${var.llm_provider}"
+              - "--gemini-api-key"
+              - "${var.gemini_api_key}"
+              - "--dq-fail-on-issues"
+              - "${var.dq_fail_on_issues}"
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - pymongo==4.16.0
+              - dnspython==2.8.0
+
+  apps:
+    dq_rescue_agent:
+      name: dq-rescue-agent
+      source_code_path: ./app
+      config:
+        command: ["uvicorn", "agent_app:app", "--host", "0.0.0.0", "--port", "8000"]
+        env:
+          - name: LLM_PROVIDER
+            value: ${var.llm_provider}
+          - name: GEMINI_API_KEY
+            value: ${var.gemini_api_key}
+#          - name: OPENAI_API_KEY
+#            value: ${var.openai_api_key}
+#          - name: ANTHROPIC_API_KEY
+#            value: ${var.anthropic_api_key}
+          - name: DATABRICKS_SERVER_HOSTNAME
+            value: ${var.databricks_server_hostname}
+          - name: DATABRICKS_HTTP_PATH
+            value: ${var.databricks_http_path}
+          - name: DATABRICKS_TOKEN
+            value: ${var.databricks_token}
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-78d92c1b-3cff.cloud.databricks.com

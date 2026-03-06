@@ -1,0 +1,1266 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R 15 0 R 17 0 R 19 0 R 21 0 R 23 0 R] /Count 10 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+4 0 obj
+<< /Length 3506 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+(Agentic Data Quality POC) Tj
+T*
+() Tj
+T*
+(Full Technical Documentation \(Databricks Free Edition\)) Tj
+T*
+() Tj
+T*
+(Version: 1.0) Tj
+T*
+(Last updated: 2026-03-06) Tj
+T*
+(Repository scope: end-to-end pipeline, simulator, Databricks bundle, and) Tj
+T*
+(AI agent app) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(1. Purpose and Scope) Tj
+T*
+() Tj
+T*
+(This document explains the full architecture and implementation of the) Tj
+T*
+(project:) Tj
+T*
+() Tj
+T*
+(-   metadata-driven ingestion and transformation in Databricks) Tj
+T*
+(-   SCD Type 2 Silver model) Tj
+T*
+(-   rule-based data quality engine) Tj
+T*
+(-   issue logging model) Tj
+T*
+(-   AI-assisted remediation agent \(FastAPI app\)) Tj
+T*
+(-   deployment model using Databricks Asset Bundles) Tj
+T*
+() Tj
+T*
+(The target runtime is Databricks Free Edition, using catalog workspace) Tj
+T*
+(and serverless-compatible patterns.) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(2. High-Level Architecture) Tj
+T*
+() Tj
+T*
+(2.1 End-to-End Architecture Diagram) Tj
+T*
+() Tj
+T*
+(    +---------------------+          +---------------------------------------------+) Tj
+T*
+(    | MongoDB Atlas       |          | Databricks Job: poc_pipeline_job            |) Tj
+T*
+(    | ecommerce.customers |  ---->   |                                             |) Tj
+T*
+(    +---------------------+          |  [1] SetupMetadata                           |) Tj
+T*
+(                                     |  [2] IngestBronze                            |) Tj
+T*
+(                                     |  [3] Scd2Silver                              |) Tj
+T*
+(                                     |  [4] DqEngine                                |) Tj
+T*
+(                                     +----------------------+----------------------+) Tj
+T*
+(                                                            |) Tj
+T*
+(                                                            v) Tj
+T*
+(                                     +---------------------------------------------+) Tj
+T*
+(                                     | Delta Tables in workspace.agentic_poc       |) Tj
+T*
+(                                     | - metadata_config                            |) Tj
+T*
+(                                     | - dq_rules                                   |) Tj
+T*
+(                                     | - bronze_customers                           |) Tj
+T*
+(                                     | - silver_customers                           |) Tj
+T*
+(                                     | - dq_issues_log                              |) Tj
+T*
+(                                     +----------------------+----------------------+) Tj
+T*
+(                                                            |) Tj
+T*
+(                                                            v) Tj
+T*
+(                                     +---------------------------------------------+) Tj
+T*
+(                                     | Databricks App: Data Quality Agent          |) Tj
+T*
+(                                     | FastAPI + SQL connector + LLM provider      |) Tj
+T*
+(                                     | Endpoints: /ui /latest-issue /issues-summary|) Tj
+T*
+(                                     | /analyze /docs                               |) Tj
+T*
+(                                     +---------------------------------------------+) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 2707 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+() Tj
+T*
+(2.2 Runtime Technology Stack) Tj
+T*
+() Tj
+T*
+(  -----------------------------------------------------------------------) Tj
+T*
+(  Layer                               Technology) Tj
+T*
+(  ----------------------------------- -----------------------------------) Tj
+T*
+(  Source simulation                   Python 3.12 script + pymongo) Tj
+T*
+() Tj
+T*
+(  Orchestration                       Databricks Asset Bundles) Tj
+T*
+(                                      \(databricks.yml\)) Tj
+T*
+() Tj
+T*
+(  Data processing                     PySpark + Delta Lake) Tj
+T*
+() Tj
+T*
+(  Modeling                            SCD Type 2 merge logic) Tj
+T*
+() Tj
+T*
+(  Data quality                        SQL-expression rule engine in Spark) Tj
+T*
+() Tj
+T*
+(  Issue persistence                   Delta table \(dq_issues_log\)) Tj
+T*
+() Tj
+T*
+(  App/API                             FastAPI + Uvicorn) Tj
+T*
+() Tj
+T*
+(  Warehouse access                    databricks-sql-connector) Tj
+T*
+() Tj
+T*
+(  LLM providers                       Gemini \(google-genai + fallback) Tj
+T*
+(                                      google-generativeai\), OpenAI,) Tj
+T*
+(                                      Anthropic) Tj
+T*
+() Tj
+T*
+(  Environment injection               PowerShell loader \(.load-env.ps1\)) Tj
+T*
+(  -----------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(3. Repository Structure and Responsibilities) Tj
+T*
+() Tj
+T*
+(    .) Tj
+T*
+(    |-- databricks.yml                 # Bundle definition \(job + app + variables\)) Tj
+T*
+(    |-- pipeline/poc_pipeline.py       # Full pipeline implementation) Tj
+T*
+(    |-- scripts/00_mongo_simulator.py  # Seed/add_good/add_bad source records) Tj
+T*
+(    |-- app/agent_app.py               # FastAPI app, UI, SQL queries, LLM analysis) Tj
+T*
+(    |-- app/requirements.txt           # App dependencies) Tj
+T*
+(    |-- .load-env.ps1                  # Loads .env + BUNDLE_VAR_* vars) Tj
+T*
+(    |-- .env.example                   # Required configuration keys) Tj
+T*
+(    |-- README.md                      # User-oriented instructions) Tj
+T*
+(    |-- commands_guide.txt             # Command-oriented runbook) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(4. Databricks Asset Bundle Design) Tj
+T*
+() Tj
+T*
+(File: databricks.yml) Tj
+T*
+() Tj
+T*
+(4.1 Resources) Tj
+T*
+() Tj
+T*
+(1.  Job resource: poc_pipeline_job) Tj
+T*
+() Tj
+T*
+(-   Task SetupMetadata) Tj
+T*
+(-   Task IngestBronze depends on SetupMetadata) Tj
+T*
+(-   Task Scd2Silver depends on IngestBronze) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 1712 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+(-   Task DqEngine depends on Scd2Silver) Tj
+T*
+() Tj
+T*
+(2.  App resource: dq_rescue_agent) Tj
+T*
+() Tj
+T*
+(-   command: uvicorn agent_app:app --host 0.0.0.0 --port 8000) Tj
+T*
+(-   env vars injected from bundle variables) Tj
+T*
+() Tj
+T*
+(4.2 Job Environment) Tj
+T*
+() Tj
+T*
+(-   environment_version: "5") Tj
+T*
+(-   dependencies for job task runtime:) Tj
+T*
+(    -   pymongo==4.16.0) Tj
+T*
+(    -   dnspython==2.8.0) Tj
+T*
+() Tj
+T*
+(4.3 Config Variables) Tj
+T*
+() Tj
+T*
+(Main variables:) Tj
+T*
+() Tj
+T*
+(-   mongodb_uri) Tj
+T*
+(-   llm_provider) Tj
+T*
+(-   gemini_api_key) Tj
+T*
+(-   dq_fail_on_issues \(default false\)) Tj
+T*
+(-   databricks_server_hostname) Tj
+T*
+(-   databricks_http_path) Tj
+T*
+(-   databricks_token) Tj
+T*
+() Tj
+T*
+(dq_fail_on_issues is deployment-scoped: changing it requires) Tj
+T*
+(bundle deploy.) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(5. Data Model and Contracts) Tj
+T*
+() Tj
+T*
+(Namespace:) Tj
+T*
+() Tj
+T*
+(-   catalog/schema namespace: workspace.agentic_poc) Tj
+T*
+() Tj
+T*
+(Tables:) Tj
+T*
+() Tj
+T*
+(1.  metadata_config) Tj
+T*
+() Tj
+T*
+(-   source-level ingestion config) Tj
+T*
+(-   key fields: source_name, source_format, source_options,) Tj
+T*
+(    target_table, is_active) Tj
+T*
+() Tj
+T*
+(2.  dq_rules) Tj
+T*
+() Tj
+T*
+(-   active rule definitions) Tj
+T*
+(-   key fields: rule_id, rule_sql, severity, is_active) Tj
+T*
+() Tj
+T*
+(3.  bronze_customers) Tj
+T*
+() Tj
+T*
+(-   normalized records from source) Tj
+T*
+(-   includes source_document_id, ingested_at) Tj
+T*
+() Tj
+T*
+(4.  silver_customers \(SCD2\)) Tj
+T*
+() Tj
+T*
+(-   includes is_current, valid_from, valid_to, record_hash) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 2144 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+() Tj
+T*
+(5.  dq_issues_log) Tj
+T*
+() Tj
+T*
+(-   one row per failed record per rule) Tj
+T*
+(-   includes serialized record_payload, rule_id, timestamp) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(6. Metadata-Driven Pattern \(Core of this POC\)) Tj
+T*
+() Tj
+T*
+(6.1 What ‚Äúmetadata-driven‚Äù means here) Tj
+T*
+() Tj
+T*
+(The pipeline does not hardcode source connection options in the ingest) Tj
+T*
+(step. Instead, SetupMetadata writes a metadata row into metadata_config,) Tj
+T*
+(and IngestBronze reads that active row at runtime.) Tj
+T*
+() Tj
+T*
+(Operationally:) Tj
+T*
+() Tj
+T*
+(-   control plane = metadata + rules tables) Tj
+T*
+(-   execution plane = Spark steps consuming control metadata) Tj
+T*
+() Tj
+T*
+(6.2 Metadata-Driven Execution Flow) Tj
+T*
+() Tj
+T*
+(    SetupMetadata) Tj
+T*
+(      -> write metadata_config \(source_format, source_options, target_table\)) Tj
+T*
+(      -> write dq_rules) Tj
+T*
+() Tj
+T*
+(    IngestBronze) Tj
+T*
+(      -> read active row from metadata_config) Tj
+T*
+(      -> resolve source format/options dynamically) Tj
+T*
+(      -> load data and write Bronze) Tj
+T*
+() Tj
+T*
+(6.3 Why this is valuable) Tj
+T*
+() Tj
+T*
+(-   decouples pipeline logic from environment-specific source details) Tj
+T*
+(-   supports controlled source changes without code rewrite) Tj
+T*
+(-   enables reusable ingestion step for additional sources) Tj
+T*
+(-   centralizes rule governance in dq_rules) Tj
+T*
+() Tj
+T*
+(6.4 Current POC Boundaries) Tj
+T*
+() Tj
+T*
+(-   single active source: customers_mongo) Tj
+T*
+(-   single domain table pair: bronze_customers -> silver_customers) Tj
+T*
+(-   rule execution currently tied to current Silver records) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(7. Pipeline Internals \(pipeline/poc_pipeline.py\)) Tj
+T*
+() Tj
+T*
+(7.1 Entry and Dispatch) Tj
+T*
+() Tj
+T*
+(The script accepts --key value pairs and dispatches by --step.) Tj
+T*
+() Tj
+T*
+(Supported steps:) Tj
+T*
+() Tj
+T*
+(-   SetupMetadata) Tj
+T*
+(-   IngestBronze) Tj
+T*
+(-   Scd2Silver) Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 1768 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+(-   DqEngine) Tj
+T*
+() Tj
+T*
+(Dispatch Flow) Tj
+T*
+() Tj
+T*
+(    main\(\)) Tj
+T*
+(      -> parse args/env) Tj
+T*
+(      -> SparkSession\(appName=step\)) Tj
+T*
+(      -> run_step\(step\)) Tj
+T*
+(          -> SetupMetadata | IngestBronze | Scd2Silver | DqEngine) Tj
+T*
+(      -> stop SparkSession) Tj
+T*
+() Tj
+T*
+(7.2 SetupMetadata Step) Tj
+T*
+() Tj
+T*
+(Responsibilities:) Tj
+T*
+() Tj
+T*
+(-   create schema if needed) Tj
+T*
+(-   overwrite metadata_config) Tj
+T*
+(-   overwrite dq_rules) Tj
+T*
+(-   create dq_issues_log if absent) Tj
+T*
+() Tj
+T*
+(Flow:) Tj
+T*
+() Tj
+T*
+(    validate mongodb_uri) Tj
+T*
+(      -> CREATE SCHEMA IF NOT EXISTS) Tj
+T*
+(      -> WRITE metadata_config \(overwrite\)) Tj
+T*
+(      -> WRITE dq_rules \(overwrite\)) Tj
+T*
+(      -> CREATE dq_issues_log IF NOT EXISTS) Tj
+T*
+() Tj
+T*
+(7.3 IngestBronze Step) Tj
+T*
+() Tj
+T*
+(Responsibilities:) Tj
+T*
+() Tj
+T*
+(-   load active source configuration from metadata) Tj
+T*
+(-   read source records from MongoDB \(via pymongo\)) Tj
+T*
+(-   normalize data types and required columns) Tj
+T*
+(-   append into Bronze Delta table) Tj
+T*
+() Tj
+T*
+(Normalization contract:) Tj
+T*
+() Tj
+T*
+(-   cast to deterministic types) Tj
+T*
+(-   fallback updated_at to current timestamp) Tj
+T*
+(-   map _id to source_document_id) Tj
+T*
+(-   filter out null customer_id) Tj
+T*
+() Tj
+T*
+(Flow:) Tj
+T*
+() Tj
+T*
+(    read metadata_config active row) Tj
+T*
+(      -> resolve effective mongo uri) Tj
+T*
+(      -> load source docs) Tj
+T*
+(      -> normalize_source\(\)) Tj
+T*
+(      -> append to bronze_customers) Tj
+T*
+() Tj
+T*
+(7.4 Scd2Silver Step) Tj
+T*
+() Tj
+T*
+(Responsibilities:) Tj
+T*
+() Tj
+T*
+(-   create Silver table if missing) Tj
+T*
+(-   deduplicate latest Bronze row per customer_id) Tj
+ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<< /Length 2106 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+(-   compute record_hash for change detection) Tj
+T*
+(-   close current records when changes detected) Tj
+T*
+(-   insert new current versions) Tj
+T*
+() Tj
+T*
+(Flow:) Tj
+T*
+() Tj
+T*
+(    ensure silver table exists) Tj
+T*
+(      -> read bronze) Tj
+T*
+(      -> latest record per customer_id) Tj
+T*
+(      -> compare hash vs current silver) Tj
+T*
+(         -> close changed current rows \(is_current=false, valid_to=merge_ts\)) Tj
+T*
+(         -> insert new current rows \(is_current=true, valid_from=merge_ts\)) Tj
+T*
+() Tj
+T*
+(7.5 DqEngine Step) Tj
+T*
+() Tj
+T*
+(Responsibilities:) Tj
+T*
+() Tj
+T*
+(-   read active DQ rules from dq_rules) Tj
+T*
+(-   evaluate each rule against current Silver records) Tj
+T*
+(-   collect failed rows per rule) Tj
+T*
+(-   append failures to dq_issues_log) Tj
+T*
+(-   optionally fail task if dq_fail_on_issues=true) Tj
+T*
+() Tj
+T*
+(Flow:) Tj
+T*
+() Tj
+T*
+(    load active silver + active rules) Tj
+T*
+(      -> for each rule:) Tj
+T*
+(           filter rows violating rule_sql) Tj
+T*
+(           build issue rows with payload) Tj
+T*
+(      -> append issues to dq_issues_log) Tj
+T*
+(      -> if failures and strict mode: raise [DQ_VALIDATION_FAILED]) Tj
+T*
+() Tj
+T*
+(7.6 DQ Operational Modes) Tj
+T*
+() Tj
+T*
+(-   warn mode \(dq_fail_on_issues=false\): logs issues and completes) Tj
+T*
+(-   strict mode \(dq_fail_on_issues=true\): logs issues and fails DqEngine) Tj
+T*
+(    task) Tj
+T*
+() Tj
+T*
+(This is intentional behavior, not a platform failure.) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(8. Source Data Simulator \(scripts/00_mongo_simulator.py\)) Tj
+T*
+() Tj
+T*
+(Modes:) Tj
+T*
+() Tj
+T*
+(-   reset_and_seed: recreates clean baseline dataset) Tj
+T*
+(-   add_good: inserts valid incremental records) Tj
+T*
+(-   add_bad: inserts records designed to fail DQ rules) Tj
+T*
+() Tj
+T*
+(Flow:) Tj
+T*
+() Tj
+T*
+(    parse --mode and mongo uri) Tj
+T*
+(      -> connect to ecommerce.customers) Tj
+T*
+(      -> execute selected operation) Tj
+T*
+(      -> close client) Tj
+T*
+() Tj
+T*
+(Purpose:) Tj
+ET
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 14 0 R >>
+endobj
+16 0 obj
+<< /Length 1723 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+() Tj
+T*
+(-   deterministic testability of Bronze/Silver/DQ behaviors) Tj
+T*
+(-   reproducible defect scenarios for the AI agent) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(9. App Design \(app/agent_app.py\)) Tj
+T*
+() Tj
+T*
+(The app is both API and UI.) Tj
+T*
+() Tj
+T*
+(9.1 Endpoints) Tj
+T*
+() Tj
+T*
+(-   GET / -> redirects to /ui) Tj
+T*
+(-   GET /ui -> browser interface) Tj
+T*
+(-   GET /health) Tj
+T*
+(-   GET /latest-issue) Tj
+T*
+(-   GET /issues-summary) Tj
+T*
+(-   POST /analyze) Tj
+T*
+(-   GET /docs \(OpenAPI UI\)) Tj
+T*
+() Tj
+T*
+(9.2 SQL Access Model) Tj
+T*
+() Tj
+T*
+(The app reads Delta tables through Databricks SQL Warehouse using:) Tj
+T*
+() Tj
+T*
+(-   DATABRICKS_SERVER_HOSTNAME) Tj
+T*
+(-   DATABRICKS_HTTP_PATH) Tj
+T*
+(-   DATABRICKS_TOKEN) Tj
+T*
+() Tj
+T*
+(9.3 Analysis Modes) Tj
+T*
+() Tj
+T*
+(POST /analyze supports:) Tj
+T*
+() Tj
+T*
+(-   analysis_mode=latest: analyze only latest issue) Tj
+T*
+(-   analysis_mode=summary: analyze aggregated failures in a window) Tj
+T*
+() Tj
+T*
+(Additional controls:) Tj
+T*
+() Tj
+T*
+(-   window_hours, max_issues, sample_size) Tj
+T*
+(-   concise toggle) Tj
+T*
+() Tj
+T*
+(9.4 LLM Provider Strategy) Tj
+T*
+() Tj
+T*
+(Provider selected by LLM_PROVIDER.) Tj
+T*
+() Tj
+T*
+(Implemented strategies:) Tj
+T*
+() Tj
+T*
+(-   Gemini:) Tj
+T*
+(    -   primary SDK: google-genai) Tj
+T*
+(    -   fallback: google-generativeai) Tj
+T*
+(-   OpenAI: openai SDK) Tj
+T*
+(-   Anthropic: anthropic SDK) Tj
+T*
+() Tj
+T*
+(Flow:) Tj
+T*
+() Tj
+T*
+(    POST /analyze) Tj
+T*
+(      -> fetch issue data \(latest or summary window\)) Tj
+T*
+(      -> build structured prompt) Tj
+T*
+(      -> route to selected provider) Tj
+ET
+endstream
+endobj
+17 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 16 0 R >>
+endobj
+18 0 obj
+<< /Length 2064 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+(      -> return provider + issue + summary + analysis text) Tj
+T*
+() Tj
+T*
+(9.5 UI Rendering) Tj
+T*
+() Tj
+T*
+(The /ui frontend consumes API endpoints and includes:) Tj
+T*
+() Tj
+T*
+(-   mode selector \(latest / summary\)) Tj
+T*
+(-   controls for window and sample size) Tj
+T*
+(-   summary and latest payload preview panels) Tj
+T*
+(-   markdown-to-HTML rendering for analysis output) Tj
+T*
+() Tj
+T*
+(The renderer improves readability for headings, lists, and code blocks.) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(10. Agentic AI Value in this POC) Tj
+T*
+() Tj
+T*
+(This project uses ‚Äúagentic AI‚Äù as an operational assistant for DQ) Tj
+T*
+(incidents.) Tj
+T*
+() Tj
+T*
+(It does not change data automatically. It provides decision support:) Tj
+T*
+() Tj
+T*
+(-   summarizes probable root cause) Tj
+T*
+(-   points to likely failing stage) Tj
+T*
+(-   proposes minimal SQL/PySpark fixes) Tj
+T*
+(-   returns validation checks to close incident loops) Tj
+T*
+() Tj
+T*
+(Why it matters even with a single job + tasks:) Tj
+T*
+() Tj
+T*
+(-   reduces mean time to diagnose recurring bad records) Tj
+T*
+(-   standardizes remediation guidance) Tj
+T*
+(-   improves handoff quality between platform and data engineering roles) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(11. Configuration and Secrets Handling) Tj
+T*
+() Tj
+T*
+(11.1 .env and .load-env.ps1) Tj
+T*
+() Tj
+T*
+(.load-env.ps1 reads .env and sets:) Tj
+T*
+() Tj
+T*
+(-   process env vars \(KEY=value\)) Tj
+T*
+(-   bundle vars \(BUNDLE_VAR_key=value\)) Tj
+T*
+() Tj
+T*
+(Flow:) Tj
+T*
+() Tj
+T*
+(    read .env line by line) Tj
+T*
+(      -> ignore comments and empty lines) Tj
+T*
+(      -> set process env var) Tj
+T*
+(      -> set BUNDLE_VAR_<lowercase_key>) Tj
+T*
+() Tj
+T*
+(11.2 Required Inputs) Tj
+T*
+() Tj
+T*
+(-   MONGODB_URI) Tj
+T*
+(-   LLM_PROVIDER) Tj
+T*
+(-   provider API key\(s\)) Tj
+T*
+(-   DATABRICKS_* SQL connector keys) Tj
+T*
+(-   optional DQ_FAIL_ON_ISSUES) Tj
+ET
+endstream
+endobj
+19 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 18 0 R >>
+endobj
+20 0 obj
+<< /Length 1983 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(12. Design Patterns Used) Tj
+T*
+() Tj
+T*
+(1.  Metadata-Driven Configuration Pattern) Tj
+T*
+() Tj
+T*
+(-   ingestion behavior controlled by metadata tables) Tj
+T*
+() Tj
+T*
+(2.  Medallion Layering \(Bronze/Silver\)) Tj
+T*
+() Tj
+T*
+(-   raw-normalized capture then curated SCD2) Tj
+T*
+() Tj
+T*
+(3.  SCD Type 2 Historical Modeling) Tj
+T*
+() Tj
+T*
+(-   full historical lineage of customer changes) Tj
+T*
+() Tj
+T*
+(4.  Rule Engine Pattern) Tj
+T*
+() Tj
+T*
+(-   externalized SQL predicates in dq_rules) Tj
+T*
+() Tj
+T*
+(5.  Strategy-like Provider Routing) Tj
+T*
+() Tj
+T*
+(-   runtime LLM provider selection with provider-specific implementation) Tj
+T*
+() Tj
+T*
+(6.  Fail-Fast / Fail-Open Toggle) Tj
+T*
+() Tj
+T*
+(-   configurable strict or warning mode for DQ enforcement) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(13. Operational Runbook \(Condensed\)) Tj
+T*
+() Tj
+T*
+(    1\) Load env) Tj
+T*
+(       . .\\.load-env.ps1) Tj
+T*
+() Tj
+T*
+(    2\) Validate and deploy) Tj
+T*
+(       databricks bundle validate -t dev) Tj
+T*
+(       $env:BUNDLE_VAR_dq_fail_on_issues="false") Tj
+T*
+(       databricks bundle deploy -t dev) Tj
+T*
+() Tj
+T*
+(    3\) Seed data) Tj
+T*
+(       python scripts/00_mongo_simulator.py --mode reset_and_seed) Tj
+T*
+() Tj
+T*
+(    4\) Run job) Tj
+T*
+(       databricks bundle run -t dev poc_pipeline_job) Tj
+T*
+() Tj
+T*
+(    5\) Start app) Tj
+T*
+(       databricks bundle run -t dev dq_rescue_agent) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(14. Known Constraints and Tradeoffs) Tj
+T*
+() Tj
+T*
+(-   bundle name still includes scala token \(agentic_dq_scala_poc\)) Tj
+T*
+(    despite Python runtime migration) Tj
+T*
+(-   DQ rules are currently table-driven but domain scope is single-table) Tj
+T*
+(    in this POC) Tj
+ET
+endstream
+endobj
+21 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 20 0 R >>
+endobj
+22 0 obj
+<< /Length 1444 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+40 792 Td
+(-   AI output is advisory, not auto-remediation) Tj
+T*
+(-   data source reader currently optimized for Mongo simulation path) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(15. Extension Paths) Tj
+T*
+() Tj
+T*
+(1.  Multi-source metadata rows with generic source adapters) Tj
+T*
+(2.  Rule severities with differentiated actions \(warn/error/quarantine\)) Tj
+T*
+(3.  Quarantine table for bad records instead of only issue logs) Tj
+T*
+(4.  Automated incident ticket payload generation from /analyze) Tj
+T*
+(5.  Unit/integration test harness for each pipeline step and API) Tj
+T*
+(    endpoint) Tj
+T*
+(6.  Rename bundle identifier to remove legacy scala naming) Tj
+T*
+() Tj
+T*
+(------------------------------------------------------------------------) Tj
+T*
+() Tj
+T*
+(16. Summary) Tj
+T*
+() Tj
+T*
+(This POC demonstrates a pragmatic metadata-driven data platform pattern) Tj
+T*
+(in Databricks Free Edition:) Tj
+T*
+() Tj
+T*
+(-   source metadata controls ingestion) Tj
+T*
+(-   SCD2 creates auditable Silver history) Tj
+T*
+(-   table-driven DQ rules produce explicit issue logs) Tj
+T*
+(-   configurable strict/warn behavior supports multiple operating modes) Tj
+T*
+(-   an agentic AI app accelerates diagnosis and remediation planning) Tj
+T*
+() Tj
+T*
+(The result is a compact but production-aligned reference architecture) Tj
+T*
+(for data quality operations.) Tj
+ET
+endstream
+endobj
+23 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 22 0 R >>
+endobj
+xref
+0 24
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000183 00000 n 
+0000000251 00000 n 
+0000003809 00000 n 
+0000003935 00000 n 
+0000006694 00000 n 
+0000006820 00000 n 
+0000008584 00000 n 
+0000008710 00000 n 
+0000010907 00000 n 
+0000011035 00000 n 
+0000012856 00000 n 
+0000012984 00000 n 
+0000015143 00000 n 
+0000015271 00000 n 
+0000017047 00000 n 
+0000017175 00000 n 
+0000019292 00000 n 
+0000019420 00000 n 
+0000021456 00000 n 
+0000021584 00000 n 
+0000023081 00000 n 
+trailer
+<< /Size 24 /Root 1 0 R >>
+startxref
+23209
+%%EOF
